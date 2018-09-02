@@ -254,7 +254,7 @@ def plotly_df_numerical_hist(df: pd.DataFrame, columns: List[str], ncols: int = 
     save and plt.plot(fig, filename=filename+'.html', auto_open=False)
     plt.iplot(fig)
 
-def plotly_df_grouped_hist(df: pd.DataFrame, col1: str, col2: str, ncols: int = 4, normdist: bool = False, save: bool = False, filename: str = 'histograms') -> None:
+def plotly_df_grouped_hist(df: pd.DataFrame, col1: str, col2: str, ncols: int = 4, normdist: bool = False, save: bool = False, filename: str = 'histograms', **kwargs) -> None:
     '''Docstring of `plotly_df_grouped_hist`
 
     Plot histograms of given column grouped on the unique value of another column with plotly.
@@ -293,7 +293,7 @@ def plotly_df_grouped_hist(df: pd.DataFrame, col1: str, col2: str, ncols: int = 
                         trace['y'] = trace['y'] * s.count()
                     fig.append_trace(trace, i+1, j+1)
             else:
-                trace = go.Histogram(x=s, xbins=dict(start=s.min(), end=s.max(), size=kwargs.get('size', None)), name=v)
+                trace = go.Histogram(x=s, xbins=dict(start=s.min(), end=s.max(), size=kwargs.get('size', None)), name=s.name)
                 fig.append_trace(trace, i+1, j+1)
     fig['layout'].update(layout)
     save and plt.plot(fig, filename=filename+'.html', auto_open=False)
@@ -489,7 +489,7 @@ def plotly_df_box(df: pd.DataFrame, col1: str, col2: str, save: bool = False, fi
     save and plt.plot(fig, filename=filename+'.html', auto_open=False)
     plt.iplot(fig)
     
-def plotly_df_chi_square_matrix(df: pd.DataFrame, columns: List[str], save: bool = False, filename: str = 'Chi-Square Matrix') -> None:
+def plotly_df_chi_square_matrix(df: pd.DataFrame, columns: List[str], cell_height: int = 45, width: int = 900, height: int = 700, save: bool = False, filename: str = 'Chi-Square Matrix') -> None:
     '''Docstring of `plotly_df_chi_square_matrix`
 
     Run chi-square test on every two columns of given pandas DataFrame,
@@ -504,11 +504,13 @@ def plotly_df_chi_square_matrix(df: pd.DataFrame, columns: List[str], save: bool
     '''
     data = np.c_[columns, df_chi_square_matrix(df, columns).values]
     data = np.r_[[['']+columns], data]
-    fig = ff.create_table(data, height_constant=45, index=True)
+    fig = ff.create_table(data, height_constant=cell_height, index=True)
+    fig.layout.width = width
+    fig.layout.height = height
     save and plt.plot(fig, filename=filename+'.html', auto_open=False)
     plt.iplot(fig)
 
-def plotly_describes(data: list, names: list = [], save: bool = False, filename: str = 'Descriptive Statistics'):
+def plotly_describes(data: list, names: list = [], width: int = 900, height: int = 700, save: bool = False, filename: str = 'Descriptive Statistics'):
     '''Docstring of `plotly_describes`
 
     Plot a table of descriptive statistics of given data with plotly.
@@ -530,10 +532,12 @@ def plotly_describes(data: list, names: list = [], save: bool = False, filename:
         describes[0, i+1] = des[0, 1]
         describes[1:, i+1] = [int(v*10000)/10000 for v in des[2:, 1]]
     fig = ff.create_table(describes, index=True)
+    fig.layout.width = width
+    fig.layout.height = height
     save and plt.plot(fig, filename=filename+'.html', auto_open=False)
     plt.iplot(fig)
 
-def plotly_qq_plots(data: list, names: list = [], ncols: int = 4, save: bool = False, filename: str = 'QQ plots'):
+def plotly_qq_plots(data: list, names: list = [], ncols: int = 4, width: int = 900, height: int = 700, save: bool = False, filename: str = 'QQ plots'):
     '''Docstring of `plotly_describes`
 
     Plot QQ-plots of given data with plotly.
@@ -682,10 +686,10 @@ class DataFrameFeatureAdder(BaseEstimator, TransformerMixin):
     Add extra features to DataFrame with given columns and functions.
 
     Args:
-        adds: Tuples with same structure that contains 
-            any number of columns' names, a new column name, 
-            and a function to generate a new column 
-            with given DataFrame and columns.
+        adds: Tuples with same structure that contains any 
+        number of columns' names, a list of new column names, 
+        and a function to generate new columns with given 
+        DataFrame and columns.
     '''
 
     def __init__(self, adds: list, remove: bool = False):
@@ -697,19 +701,25 @@ class DataFrameFeatureAdder(BaseEstimator, TransformerMixin):
         remove = self.remove and []
         for adds in self.adds:
             assert len(adds) == 3, 'Invalid parameters. Exactly 3 parameters are needed.'
-            cols, name, func = adds
+            cols, names, func = adds
             for col in cols:
                 assert col in X, '"{}" is not a column of given DataFrame'.format(col)
                 if self.remove: remove.append(col)
-            assert not name in X, '"{}" already exists.'.format(name)
+            if isinstance(names, str): names = [names]
+            for name in names:
+                assert not name in X, '"{}" already exists.'.format(name)
         self.remove = remove
         return self
 
     def transform(self, X: pd.DataFrame, y=None):
         X = X.copy()
         for adds in self.adds:
-            cols, name, func = adds
-            X[name] = func(X, *cols)
+            cols, names, func = adds
+            if isinstance(names, str): 
+                X[names] = func(X, *cols)
+            else:
+                X = pd.concat([X, pd.DataFrame(func(X, *cols), columns=names)], axis=1)
+            # X[names] = func(X, *cols)
         if self.remove:
             X = X.drop(columns=[*self.remove])
         return X
